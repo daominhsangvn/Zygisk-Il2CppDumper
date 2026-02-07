@@ -25,13 +25,54 @@ void hack_start(const char *game_data_dir) {
             load = true;
             il2cpp_api_init(handle);
             il2cpp_dump(game_data_dir);
+            // === ADD THIS: Dump decrypted libil2cpp.so from memory ===
+            FILE *maps = fopen("/proc/self/maps", "r");
+            FILE *mem = fopen("/proc/self/mem", "rb");
+            if (maps && mem) {
+                char dump_path[256];
+                snprintf(dump_path, sizeof(dump_path), "%s/libil2cpp_decrypted.so", game_data_dir);
+                
+                // Find first libil2cpp.so region (base)
+                char line[512];
+                uintptr_t base = 0, end = 0;
+                while (fgets(line, sizeof(line), maps)) {
+                    if (strstr(line, "libil2cpp.so") && base == 0) {
+                        sscanf(line, "%lx-%lx", &base, &end);
+                    }
+                    if (base != 0 && strstr(line, "libil2cpp.so")) {
+                        uintptr_t s, e;
+                        sscanf(line, "%lx-%lx", &s, &e);
+                        if (e > end) end = e;
+                    }
+                }
+                fclose(maps);
+                
+                if (base != 0) {
+                    size_t total = end - base;
+                    LOGI("Dumping libil2cpp.so: %p-%p (%zu bytes)", (void*)base, (void*)end, total);
+                    FILE *out = fopen(dump_path, "wb");
+                    if (out) {
+                        char buf[4096];
+                        fseeko(mem, base, SEEK_SET);
+                        size_t remaining = total;
+                        while (remaining > 0) {
+                            size_t chunk = remaining < sizeof(buf) ? remaining : sizeof(buf);
+                            size_t rd = fread(buf, 1, chunk, mem);
+                            if (rd == 0) { memset(buf, 0, chunk); rd = chunk; }
+                            fwrite(buf, 1, rd, out);
+                            remaining -= rd;
+                        }
+                        fclose(out);
+                        LOGI("Dump saved: %s (%zu bytes)", dump_path, total);
+                    }
+                }
+            }
+            if (mem) fclose(mem);
+            // === END OF DUMP CODE ===
             break;
         } else {
             sleep(1);
         }
-    }
-    if (!load) {
-        LOGI("libil2cpp.so not found in thread %d", gettid());
     }
 }
 
