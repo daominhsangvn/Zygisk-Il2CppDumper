@@ -34,13 +34,13 @@ void hack_start(const char *game_data_dir) {
                 
                 // Find first libil2cpp.so region (base)
                 char line[512];
-                uintptr_t base = 0, end = 0;
+                unsigned long base = 0, end = 0;
                 while (fgets(line, sizeof(line), maps)) {
                     if (strstr(line, "libil2cpp.so") && base == 0) {
                         sscanf(line, "%lx-%lx", &base, &end);
                     }
                     if (base != 0 && strstr(line, "libil2cpp.so")) {
-                        uintptr_t s, e;
+                        unsigned long s, e;
                         sscanf(line, "%lx-%lx", &s, &e);
                         if (e > end) end = e;
                     }
@@ -48,8 +48,9 @@ void hack_start(const char *game_data_dir) {
                 fclose(maps);
                 
                 if (base != 0) {
-                    size_t total = end - base;
-                    LOGI("Dumping libil2cpp.so: %p-%p (%zu bytes)", (void*)base, (void*)end, total);
+                    LOGI("Dumping libil2cpp.so: %lx-%lx (%zu bytes)", base, end, (size_t)(end - base));
+                    fseeko(mem, (off_t)base, SEEK_SET);
+                    size_t total = (size_t)(end - base);
                     FILE *out = fopen(dump_path, "wb");
                     if (out) {
                         char buf[4096];
